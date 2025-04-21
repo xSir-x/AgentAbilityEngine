@@ -1,0 +1,16 @@
+LICENSE
+README.md
+setup.py
+agent_ability_engine.egg-info/PKG-INFO
+agent_ability_engine.egg-info/SOURCES.txt
+agent_ability_engine.egg-info/dependency_links.txt
+agent_ability_engine.egg-info/requires.txt
+agent_ability_engine.egg-info/top_level.txt
+app/__init__.py
+app/abilities/__init__.py
+app/abilities/crawler/__init__.py
+app/abilities/crawler/web_crawler.py
+app/core/__init__.py
+app/core/ability_manager.py
+app/core/base_ability.py
+tests/test_web_crawler.py

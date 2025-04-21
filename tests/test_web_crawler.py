@@ -1,0 +1,33 @@
+import pytest
+from app.abilities.crawler.web_crawler import WebCrawlerAbility
+
+@pytest.mark.asyncio
+async def test_web_crawler_validate():
+    crawler = WebCrawlerAbility()
+    
+    # 测试有效参数
+    valid_context = {"url": "https://example.com"}
+    assert await crawler.validate(valid_context)
+    
+    # 测试无效参数
+    invalid_contexts = [
+        {},  # 空字典
+        {"url": None},  # URL为None
+        {"url": 123},  # URL不是字符串
+    ]
+    
+    for context in invalid_contexts:
+        assert not await crawler.validate(context)
+
+@pytest.mark.asyncio
+async def test_web_crawler_execute():
+    crawler = WebCrawlerAbility()
+    context = {"url": "https://example.com"}
+    
+    result = await crawler.execute(context)
+    
+    assert isinstance(result, dict)
+    assert "status" in result
+    assert "content" in result
+    assert isinstance(result["status"], int)
+    assert isinstance(result["content"], str)
