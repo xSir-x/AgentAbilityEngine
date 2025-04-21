@@ -2,48 +2,48 @@ from typing import Dict, Any
 from .base_ability import BaseAbility
 
 class AbilityManager:
-    """能力管理器，负责管理和执行所有已注册的能力"""
+    """Ability Manager responsible for managing and executing all registered abilities"""
     
     def __init__(self):
         self._abilities: Dict[str, BaseAbility] = {}
     
     def register(self, ability: BaseAbility) -> None:
-        """注册新能力
+        """Register a new ability
         
         Args:
-            ability: 实现了BaseAbility的能力实例
+            ability: An instance implementing BaseAbility interface
         """
         self._abilities[ability.name] = ability
     
     def get_ability(self, name: str) -> BaseAbility:
-        """获取指定名称的能力
+        """Get ability by name
         
         Args:
-            name: 能力名称
+            name: Name of the ability
             
         Returns:
-            BaseAbility: 能力实例
+            BaseAbility: The ability instance
             
         Raises:
-            KeyError: 当指定名称的能力不存在时
+            KeyError: When the specified ability doesn't exist
         """
         if name not in self._abilities:
             raise KeyError(f"Ability {name} not found")
         return self._abilities[name]
     
     async def execute_ability(self, name: str, context: Dict[str, Any]) -> Any:
-        """执行指定名称的能力
+        """Execute an ability by name
         
         Args:
-            name: 能力名称
-            context: 能力执行上下文
+            name: Name of the ability
+            context: Execution context for the ability
             
         Returns:
-            Any: 能力执行结果
+            Any: Result of ability execution
             
         Raises:
-            KeyError: 当指定名称的能力不存在时
-            ValueError: 当输入参数验证失败时
+            KeyError: When the specified ability doesn't exist
+            ValueError: When input parameter validation fails
         """
         ability = self.get_ability(name)
         if not await ability.validate(context):
@@ -51,10 +51,10 @@ class AbilityManager:
         return await ability.execute(context)
     
     def list_abilities(self) -> Dict[str, str]:
-        """列出所有已注册的能力及其版本
+        """List all registered abilities and their versions
         
         Returns:
-            Dict[str, str]: 能力名称到版本的映射
+            Dict[str, str]: Mapping of ability names to their versions
         """
         return {name: ability.version 
                 for name, ability in self._abilities.items()}

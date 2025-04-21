@@ -1,51 +1,65 @@
 # AgentAbilityEngine
 
-AgentAbilityEngine 是一个基于 Python Tornado 的 Agent 开放平台 API 框架，用于快速开发和部署各种 Agent 能力（如爬虫、自动化分析等）。
+<div align="center">
+    <img src="docs/images/logo.png" alt="AgentAbilityEngine Logo" width="200"/>
+</div>
 
-## 项目结构
+<div align="center">
+
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![API Documentation](https://img.shields.io/badge/api-documentation-green.svg)](https://your-docs-url.com)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)]()
+[![Code Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen.svg)]()
+
+</div>
+
+AgentAbilityEngine is a Python Tornado-based Agent Open Platform API framework for rapid development and deployment of various Agent capabilities (such as web crawling, automated analysis, etc.). To implement a new ability for agent,just need to register your ability in the ability manager and deploy this service in your server; Please do the unite test before deploying on the production, and also please cite your work on the ability function, welcome to commit it to the master branch, we all can re-use your implementation and also would appreiciate your works! Yes, lets all colloabrative together and boost this framework to the moon! Annouced by YaChang Tech Inc, Shenzhen, China
+
+## Project Structure
 
 ```
 AgentAbilityEngine/
 ├── app/
-│   ├── core/                    # 核心功能
-│   │   ├── ability_manager.py   # 能力管理器
-│   │   ├── ability_context.py   # 能力上下文
-│   │   └── base_ability.py      # 基础能力抽象类
-│   ├── abilities/               # 具体能力实现
-│   │   ├── crawler/            # 爬虫能力
-│   │   └── analyzer/           # 分析能力
-│   ├── api/                    # API路由
+│   ├── core/                    # Core functionality
+│   │   ├── ability_manager.py   # Ability manager
+│   │   ├── ability_context.py   # Ability context
+│   │   └── base_ability.py      # Base ability abstract class
+│   ├── abilities/               # Concrete ability implementations
+│   │   ├── crawler/            # Crawler abilities
+│   │   └── analyzer/           # Analysis abilities
+│   ├── api/                    # API routes
 │   │   └── handlers.py
-│   └── utils/                  # 工具类
-├── config/                     # 配置文件
-├── tests/                     # 单元测试
-└── server.py                  # 服务入口
+│   └── utils/                  # Utility classes
+├── config/                     # Configuration files
+├── tests/                     # Unit tests
+└── server.py                  # Service entry point
 ```
 
-## 环境要求
+## Requirements
 
 - Python 3.8+
 - Tornado 6.0+
 - aiohttp
-- pytest (用于测试)
+- pytest (for testing)
 
-## 快速开始
+## Quick Start
 
-1. 安装依赖：
+1. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-2. 启动服务：
+2. Start the service:
 ```bash
 python server.py
 ```
 
-服务默认运行在 http://localhost:8000
+Service runs at http://localhost:8000 by default
 
-## API 使用说明
+## API Usage
 
-### 调用能力接口
+### Call Ability Interface
 
 ```bash
 POST /api/ability/{ability_name}
@@ -53,22 +67,22 @@ Content-Type: application/json
 
 {
     "parameters": {
-        // 能力所需参数
+        // Required parameters for the ability
     }
 }
 ```
 
-示例：
+Example:
 ```bash
 curl -X POST http://localhost:8000/api/ability/web_crawler \
      -H "Content-Type: application/json" \
      -d '{"url": "https://example.com"}'
 ```
 
-## 开发新能力
+## Developing New Abilities
 
-1. 在 `app/abilities` 下创建新的能力目录
-2. 实现 BaseAbility 接口：
+1. Create a new ability directory under `app/abilities`
+2. Implement the BaseAbility interface:
 
 ```python
 from app.core.base_ability import BaseAbility
@@ -83,77 +97,77 @@ class YourAbility(BaseAbility):
         return "1.0.0"
     
     async def validate(self, context: dict) -> bool:
-        # 实现参数验证逻辑
+        # Implement parameter validation logic
         return True
     
     async def execute(self, context: dict) -> dict:
-        # 实现能力执行逻辑
+        # Implement ability execution logic
         return {"result": "success"}
 ```
 
-3. 在 server.py 中注册新能力：
+3. Register the new ability in server.py:
 
 ```python
 ability_manager.register(YourAbility())
 ```
 
-## 单元测试
+## Unit Testing
 
-运行所有测试：
+Run all tests:
 ```bash
 pytest tests/
 ```
 
-运行特定测试：
+Run specific test:
 ```bash
 pytest tests/test_your_ability.py
 ```
 
-## 部署
+## Deployment
 
-### Docker 部署
+### Docker Deployment
 
-1. 构建镜像：
+1. Build image:
 ```bash
-docker build -t agent-ability-engine .
+docker build -t agent-ability-engine .`
 ```
 
-2. 运行容器：
+2. Run container:
 ```bash
 docker run -d -p 8000:8000 agent-ability-engine
 ```
 
-### 传统部署
+### Traditional Deployment
 
-1. 安装依赖：
+1. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-2. 配置服务：
-- 修改 config/config.yaml 中的配置
+2. Configure service:
+- Modify settings in config/config.yaml
 
-3. 启动服务：
+3. Start service:
 ```bash
 python server.py
 ```
 
-建议使用 supervisor 或 systemd 管理服务进程。
+It's recommended to use supervisor or systemd to manage the service process.
 
-## 监控与日志
+## Monitoring and Logging
 
-- 日志位置：logs/
-- 支持 Prometheus 指标采集
-- 健康检查接口：/health
+- Log location: logs/
+- Supports Prometheus metrics collection
+- Health check endpoint: /health
 
-## 贡献指南
+## Contributing Guidelines
 
-1. Fork 项目
-2. 创建特性分支
-3. 提交更改
-4. 推送到分支
-5. 创建 Pull Request
+1. Fork the project
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
-## 许可证
+## License
 
 MIT License

@@ -6,16 +6,16 @@ from app.api.handlers import AbilityHandler, HealthHandler, AbilityListHandler
 from app.abilities.crawler.web_crawler import WebCrawlerAbility
 
 def load_config():
-    """加载配置文件"""
+    """Load configuration file"""
     with open("config/config.yaml", "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 def make_app():
-    """创建Tornado应用"""
-    # 初始化能力管理器
+    """Create Tornado application"""
+    # Initialize ability manager
     ability_manager = AbilityManager()
     
-    # 注册爬虫能力
+    # Register crawler ability
     ability_manager.register(WebCrawlerAbility())
     
     return tornado.web.Application([

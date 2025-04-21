@@ -3,7 +3,7 @@ from typing import Dict, Any
 from ...core.base_ability import BaseAbility
 
 class WebCrawlerAbility(BaseAbility):
-    """网页爬虫能力实现"""
+    """Web crawler ability implementation"""
     
     @property
     def name(self) -> str:
@@ -14,24 +14,24 @@ class WebCrawlerAbility(BaseAbility):
         return "1.0.0"
     
     async def validate(self, context: Dict[str, Any]) -> bool:
-        """验证输入参数
+        """Validate input parameters
         
-        必需参数:
-        - url: 要爬取的网页URL
+        Required parameters:
+        - url: Target webpage URL
         
-        可选参数:
-        - headers: 自定义请求头
+        Optional parameters:
+        - headers: Custom request headers
         """
         return isinstance(context.get("url"), str)
     
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """执行爬虫逻辑
+        """Execute crawler logic
         
         Returns:
             Dict[str, Any]: {
-                "status": HTTP状态码,
-                "content": 页面内容,
-                "headers": 响应头
+                "status": HTTP status code,
+                "content": Page content,
+                "headers": Response headers
             }
         """
         url = context["url"]

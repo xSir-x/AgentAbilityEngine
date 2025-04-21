@@ -3,22 +3,22 @@ from tornado.web import RequestHandler
 from ..core.ability_manager import AbilityManager
 
 class BaseHandler(RequestHandler):
-    """基础请求处理器"""
+    """Base request handler"""
     
     def set_default_headers(self):
         self.set_header("Content-Type", "application/json")
 
 class AbilityHandler(BaseHandler):
-    """能力调用处理器"""
+    """Handler for ability execution"""
     
     def initialize(self, ability_manager: AbilityManager):
         self.ability_manager = ability_manager
     
     async def post(self, ability_name: str):
-        """处理能力调用请求
+        """Handle ability execution request
         
         Args:
-            ability_name: 能力名称
+            ability_name: Name of the ability to execute
         """
         try:
             context = json.loads(self.request.body)
@@ -38,19 +38,19 @@ class AbilityHandler(BaseHandler):
             self.write({"success": False, "error": "Internal server error"})
 
 class HealthHandler(BaseHandler):
-    """健康检查处理器"""
+    """Health check handler"""
     
     def get(self):
-        """处理健康检查请求"""
+        """Handle health check request"""
         self.write({"status": "ok"})
 
 class AbilityListHandler(BaseHandler):
-    """能力列表处理器"""
+    """Handler for listing available abilities"""
     
     def initialize(self, ability_manager: AbilityManager):
         self.ability_manager = ability_manager
     
     def get(self):
-        """获取所有已注册的能力列表"""
+        """Get list of all registered abilities"""
         abilities = self.ability_manager.list_abilities()
         self.write({"abilities": abilities})

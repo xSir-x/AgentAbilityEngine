@@ -5,15 +5,15 @@ from app.abilities.crawler.web_crawler import WebCrawlerAbility
 async def test_web_crawler_validate():
     crawler = WebCrawlerAbility()
     
-    # 测试有效参数
+    # Test valid parameters
     valid_context = {"url": "https://example.com"}
     assert await crawler.validate(valid_context)
     
-    # 测试无效参数
+    # Test invalid parameters
     invalid_contexts = [
-        {},  # 空字典
-        {"url": None},  # URL为None
-        {"url": 123},  # URL不是字符串
+        {},  # Empty dictionary
+        {"url": None},  # URL is None
+        {"url": 123},  # URL is not a string
     ]
     
     for context in invalid_contexts:
