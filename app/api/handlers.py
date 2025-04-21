@@ -1,6 +1,14 @@
 import json
+import os
+from datetime import datetime
 from tornado.web import RequestHandler
 from ..core.ability_manager import AbilityManager
+from ..utils.obs_helper import OBSHelper
+
+# 配置上传文件存储路径
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads")
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
 
 class BaseHandler(RequestHandler):
     """Base request handler"""
@@ -54,3 +62,51 @@ class AbilityListHandler(BaseHandler):
         """Get list of all registered abilities"""
         abilities = self.ability_manager.list_abilities()
         self.write({"abilities": abilities})
+
+class FileUploadHandler(BaseHandler):
+    """Handler for file uploads to Huawei Cloud OBS"""
+    
+    def initialize(self, config):
+        """Initialize with config from server"""
+        self.config = config
+        obs_config = config.get("huaweicloud", {}).get("obs", {})
+        self.obs_helper = OBSHelper(
+            access_key_id=obs_config.get("access_key_id"),
+            secret_access_key=obs_config.get("secret_access_key"),
+            server=obs_config.get("server"),
+            bucket_name=obs_config.get("bucket_name")
+        )
+    
+    async def post(self):
+        """Handle file upload request"""
+        try:
+            files = self.request.files.get('file', [])
+            if not files:
+                raise ValueError("No file uploaded")
+            
+            file_info = files[0]
+            original_filename = file_info['filename']
+            
+            # 验证文件类型
+            if not original_filename.endswith('.xlsx'):
+                raise ValueError("Only .xlsx files are allowed")
+            
+            # 上传文件到华为云 OBS
+            file_url = await self.obs_helper.upload_file(
+                file_data=file_info['body'],
+                original_filename=original_filename
+            )
+            
+            self.write({
+                "success": True,
+                "data": {
+                    "filename": os.path.basename(file_url),
+                    "file_url": file_url
+                }
+            })
+        except ValueError as e:
+            self.set_status(400)
+            self.write({"success": False, "error": str(e)})
+        except Exception as e:
+            self.set_status(500)
+            self.write({"success": False, "error": str(e)})

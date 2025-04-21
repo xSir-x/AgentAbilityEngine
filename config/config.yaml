@@ -10,3 +10,10 @@ logging:
 metrics:
   enabled: true
   port: 9090
+
+huaweicloud:
+  obs:
+    access_key_id: "HPUAZPZBF40NS0MKCXJD"
+    secret_access_key: "Qm1VPOQhoLgIJYgOI4tAlmkuxrqwonNzdHYzoSOW"
+    server: "obs.cn-south-1.myhuaweicloud.com"  # 根据实际区域修改
+    bucket_name: "obs-270d"

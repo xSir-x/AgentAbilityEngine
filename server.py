@@ -2,8 +2,9 @@ import tornado.ioloop
 import tornado.web
 import yaml
 from app.core.ability_manager import AbilityManager
-from app.api.handlers import AbilityHandler, HealthHandler, AbilityListHandler
+from app.api.handlers import AbilityHandler, HealthHandler, AbilityListHandler, FileUploadHandler
 from app.abilities.crawler.web_crawler import WebCrawlerAbility
+from app.abilities.analyzer.sales_analyzer import SalesAnalyzer
 
 def load_config():
     """Load configuration file"""
@@ -12,15 +13,20 @@ def load_config():
 
 def make_app():
     """Create Tornado application"""
+    # Load configuration
+    config = load_config()
+    
     # Initialize ability manager
     ability_manager = AbilityManager()
     
-    # Register crawler ability
+    # Register abilities
     ability_manager.register(WebCrawlerAbility())
+    ability_manager.register(SalesAnalyzer())
     
     return tornado.web.Application([
         (r"/api/ability/([^/]+)", AbilityHandler, dict(ability_manager=ability_manager)),
         (r"/api/abilities", AbilityListHandler, dict(ability_manager=ability_manager)),
+        (r"/api/upload", FileUploadHandler, dict(config=config)),
         (r"/health", HealthHandler),
     ])
 
