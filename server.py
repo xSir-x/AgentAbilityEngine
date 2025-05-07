@@ -5,6 +5,7 @@ from app.core.ability_manager import AbilityManager
 from app.api.handlers import AbilityHandler, HealthHandler, AbilityListHandler, FileUploadHandler
 from app.abilities.crawler.web_crawler import WebCrawlerAbility
 from app.abilities.analyzer.sales_analyzer import SalesAnalyzer
+from app.abilities.auth.login import LoginAbility
 
 def load_config():
     """Load configuration file"""
@@ -22,6 +23,7 @@ def make_app():
     # Register abilities
     ability_manager.register(WebCrawlerAbility())
     ability_manager.register(SalesAnalyzer())
+    ability_manager.register(LoginAbility())
     
     return tornado.web.Application([
         (r"/api/ability/([^/]+)", AbilityHandler, dict(ability_manager=ability_manager)),

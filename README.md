@@ -171,3 +171,149 @@ It's recommended to use supervisor or systemd to manage the service process.
 ## License
 
 MIT License
+
+## Authentication Ability
+
+AgentAbilityEngine provides a flexible login ability that can be used for different authentication scenarios. This section explains how to use and extend the login functionality.
+
+### Using the Login Ability
+
+The login ability is accessible through the standard ability endpoint:
+
+```bash
+POST /api/ability/login
+Content-Type: application/json
+
+{
+    "username": "user1",
+    "password": "password123"
+}
+```
+
+On successful authentication, it returns merchant details:
+
+```json
+{
+    "success": true,
+    "merchant_id": "merchant1",
+    "merchant_bg_url": "https://example.com/merchant1/background.jpg",
+    "merchant_bot_id": "bot_merchant1",
+    "merchant_user_id": "user_merchant1", 
+    "merchant_coze_token": "coze_token_merchant1"
+}
+```
+
+### Configuration
+
+Login credentials and merchant information are configured in `config/auth_config.yaml`:
+
+```yaml
+# User credentials mapping
+users:
+  admin:
+    password: admin123
+    merchant_id: merchant1
+  user1:
+    password: password123
+    merchant_id: merchant1
+
+# Merchant information 
+merchants:
+  merchant1:
+    bg_url: "https://example.com/merchant1/background.jpg"
+    bot_id: "bot_merchant1"
+    user_id: "user_merchant1"
+    coze_token: "coze_token_merchant1"
+```
+
+### Extending the Login Ability
+
+#### Adding New Fields
+
+To add new fields to the login response:
+
+1. Add the new fields to the merchant configuration in `config/auth_config.yaml`:
+
+```yaml
+merchants:
+  merchant1:
+    # Existing fields
+    bg_url: "https://example.com/merchant1/background.jpg"
+    bot_id: "bot_merchant1"
+    user_id: "user_merchant1"
+    coze_token: "coze_token_merchant1"
+    # New fields
+    new_field1: "value1"
+    new_field2: "value2"
+```
+
+2. Update the `execute` method in `app/abilities/auth/login.py` to include the new fields in the response:
+
+```python
+async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    # ... existing validation code ...
+    
+    # Return merchant details
+    return {
+        "success": True,
+        "merchant_id": merchant_id,
+        "merchant_bg_url": merchant_info.get("bg_url", "default_bg_url"),
+        "merchant_bot_id": merchant_info.get("bot_id", "default_bot_id"),
+        "merchant_user_id": merchant_info.get("user_id", "default_user_id"),
+        "merchant_coze_token": merchant_info.get("coze_token", "default_coze_token"),
+        # Add new fields
+        "new_field1": merchant_info.get("new_field1", "default_value1"),
+        "new_field2": merchant_info.get("new_field2", "default_value2")
+    }
+```
+
+#### Supporting New Authentication Methods
+
+To support different login scenarios:
+
+1. **Extend the Existing Ability**: Modify the `LoginAbility` class to handle different authentication schemes:
+
+```python
+async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    # Detect authentication method
+    if "api_key" in context:
+        # API key authentication
+        return self._authenticate_with_api_key(context)
+    elif "token" in context:
+        # Token-based authentication
+        return self._authenticate_with_token(context)
+    else:
+        # Username/password authentication (default)
+        return self._authenticate_with_credentials(context)
+```
+
+2. **Create Specialized Abilities**: For more complex scenarios, create dedicated ability classes:
+
+   - Create a new file `app/abilities/auth/oauth_login.py`
+   - Implement the OAuth-specific login logic
+   - Register the new ability in `server.py`
+
+Example for a specialized ability:
+
+```python
+class OAuthLoginAbility(BaseAbility):
+    @property
+    def name(self) -> str:
+        return "oauth_login"
+    
+    # ... implement OAuth-specific validation and execution ...
+```
+
+Register in server.py:
+
+```python
+from app.abilities.auth.oauth_login import OAuthLoginAbility
+# ... existing imports ...
+
+def make_app():
+    # ... existing code ...
+    ability_manager.register(OAuthLoginAbility())
+    # ... existing code ...
+```
+
+This modular approach allows you to support various authentication mechanisms while keeping each implementation clean and focused on a specific authentication scenario.

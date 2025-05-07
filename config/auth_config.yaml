@@ -1,0 +1,26 @@
+# Authentication configuration for LoginAbility
+
+# User credentials mapping
+users:
+  admin:
+    password: admin123
+    merchant_id: merchant1
+  user1:
+    password: password123
+    merchant_id: merchant1
+  user2:
+    password: password456
+    merchant_id: merchant2
+
+# Merchant information 
+merchants:
+  merchant1:
+    bg_url: "https://example.com/merchant1/background.jpg"
+    bot_id: "bot_merchant1"
+    user_id: "user_merchant1"
+    coze_token: "coze_token_merchant1"
+  merchant2:
+    bg_url: "https://example.com/merchant2/background.jpg"
+    bot_id: "bot_merchant2"
+    user_id: "user_merchant2"
+    coze_token: "coze_token_merchant2"
