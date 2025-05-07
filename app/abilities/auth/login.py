@@ -1,5 +1,5 @@
 """
-Login ability for authenticating users.
+Login ability for authenticating users using MySQL database on Huawei Cloud.
 """
 from typing import Dict, Any
 from ...core.base_ability import BaseAbility
@@ -7,12 +7,14 @@ import yaml
 import os
 import logging
 import json
+import pymysql
+from pymysql.cursors import DictCursor
 
 class LoginAbility(BaseAbility):
-    """Login ability implementation for authenticating users"""
+    """Login ability implementation for authenticating users from MySQL database"""
     
     def __init__(self):
-        """Initialize with default configuration"""
+        """Initialize with database configuration"""
         # Load configuration file if exists
         config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 
                                    "config", "auth_config.yaml")
@@ -24,13 +26,35 @@ class LoginAbility(BaseAbility):
         except Exception as e:
             logging.error(f"Failed to load auth configuration: {e}")
         
-        # Default merchant data if not specified in config
-        self.merchant_data = self.config.get("merchants", {})
+        # Database configuration
+        self.db_config = self.config.get("database", {
+            "host": "e6ea2387617046a283e6b583b0fc9a31in01.internal.cn-south-1.mysql.rds.myhuaweicloud.com",
+            "user": "root",
+            "password": "",  # Will be loaded from config
+            "db": "merchant_db",
+            "charset": "utf8mb4",
+            "cursorclass": DictCursor
+        })
         
-        # Set default user credentials if not in config
+        # Fallback configuration if database connection fails
+        self.fallback_enabled = self.config.get("fallback_enabled", True)
+        self.merchant_data = self.config.get("merchants", {})
         self.users = self.config.get("users", {
             "admin": {"password": "admin123", "merchant_id": "default_merchant"}
         })
+        
+        # Initialize connection to None, will be established when needed
+        self.connection = None
+    
+    def _get_connection(self):
+        """Get database connection, create new if doesn't exist or closed"""
+        try:
+            if self.connection is None or not self.connection.open:
+                self.connection = pymysql.connect(**self.db_config)
+            return self.connection
+        except Exception as e:
+            logging.error(f"Database connection error: {e}")
+            raise
     
     @property
     def name(self) -> str:
@@ -74,24 +98,82 @@ class LoginAbility(BaseAbility):
         username = context.get("username")
         password = context.get("password")
         
-        # Verify user credentials
-        user_data = self.users.get(username)
-        if not user_data or user_data.get("password") != password:
+        # Try to authenticate using database
+        try:
+            # Get database connection
+            connection = self._get_connection()
+            
+            with connection.cursor() as cursor:
+                # Verify user credentials
+                # Note: In production, passwords should be hashed
+                sql = "SELECT * FROM users WHERE username = %s AND password = %s"
+                cursor.execute(sql, (username, password))
+                user_data = cursor.fetchone()
+                
+                if not user_data:
+                    return {
+                        "success": False,
+                        "error": "Invalid username or password"
+                    }
+                
+                # Get merchant details based on merchant_id
+                merchant_id = user_data.get("merchant_id")
+                sql = "SELECT * FROM merchants WHERE merchant_id = %s"
+                cursor.execute(sql, (merchant_id,))
+                merchant_info = cursor.fetchone()
+                
+                if not merchant_info:
+                    return {
+                        "success": False,
+                        "error": f"Merchant information not found for ID: {merchant_id}"
+                    }
+                
+                # Return merchant details
+                return {
+                    "success": True,
+                    "merchant_id": merchant_id,
+                    "merchant_bg_url": merchant_info.get("bg_url"),
+                    "merchant_bot_id": merchant_info.get("bot_id"),
+                    "merchant_user_id": merchant_info.get("user_id"),
+                    "merchant_coze_token": merchant_info.get("coze_token")
+                }
+                
+        except Exception as e:
+            logging.error(f"Database login error: {e}")
+            
+            # Fallback to configuration-based authentication if enabled
+            if not self.fallback_enabled:
+                return {
+                    "success": False,
+                    "error": f"Database error: {str(e)}"
+                }
+            
+            # Log fallback authentication attempt
+            logging.info(f"Falling back to configuration-based authentication for user: {username}")
+            
+            # Fallback authentication logic
+            user_data = self.users.get(username)
+            if not user_data or user_data.get("password") != password:
+                return {
+                    "success": False,
+                    "error": "Invalid username or password"
+                }
+            
+            # Get merchant details
+            merchant_id = user_data.get("vendor_id", "default_merchant")
+            merchant_info = self.merchant_data.get(merchant_id, {})
+            
+            # Return merchant details
             return {
-                "success": False,
-                "error": "Invalid username or password"
+                "success": True,
+                "merchant_id": merchant_id,
+                "merchant_bg_url": merchant_info.get("vendor_bg", "https://default-bg-url.com/background.jpg"),
+                "merchant_bot_id": merchant_info.get("bot_id", "default_bot_id"),
+                "merchant_user_id": merchant_info.get("user_id", "default_user_id"),
+                "merchant_coze_token": merchant_info.get("coze_token", "default_coze_token")
             }
-        
-        # Get merchant details
-        merchant_id = user_data.get("merchant_id", "default_merchant")
-        merchant_info = self.merchant_data.get(merchant_id, {})
-        
-        # Return merchant details
-        return {
-            "success": True,
-            "merchant_id": merchant_id,
-            "merchant_bg_url": merchant_info.get("bg_url", "https://default-bg-url.com/background.jpg"),
-            "merchant_bot_id": merchant_info.get("bot_id", "default_bot_id"),
-            "merchant_user_id": merchant_info.get("user_id", "default_user_id"),
-            "merchant_coze_token": merchant_info.get("coze_token", "default_coze_token")
-        }
+    
+    def __del__(self):
+        """Close database connection when object is destroyed"""
+        if hasattr(self, 'connection') and self.connection and self.connection.open:
+            self.connection.close()
