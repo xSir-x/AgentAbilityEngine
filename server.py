@@ -1,6 +1,7 @@
 import tornado.ioloop
 import tornado.web
 import yaml
+import logging  # 添加logging模块
 from app.core.ability_manager import AbilityManager
 from app.api.handlers import AbilityHandler, HealthHandler, AbilityListHandler, FileUploadHandler
 from app.abilities.crawler.web_crawler import WebCrawlerAbility
@@ -14,6 +15,16 @@ def load_config():
 
 def make_app():
     """Create Tornado application"""
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler('server.log')
+        ]
+    )
+    
     # Load configuration
     config = load_config()
     
@@ -25,12 +36,17 @@ def make_app():
     ability_manager.register(SalesAnalyzer())
     ability_manager.register(LoginAbility())
     
-    return tornado.web.Application([
+    # Create application with logging
+    app = tornado.web.Application([
         (r"/api/ability/([^/]+)", AbilityHandler, dict(ability_manager=ability_manager)),
         (r"/api/abilities", AbilityListHandler, dict(ability_manager=ability_manager)),
         (r"/api/upload", FileUploadHandler, dict(config=config)),
         (r"/health", HealthHandler),
     ])
+    
+    # Log application startup
+    logging.info("Application initialized with registered abilities")
+    return app
 
 if __name__ == "__main__":
     try:
@@ -39,9 +55,11 @@ if __name__ == "__main__":
         
         app = make_app()
         app.listen(port)
-        print(f"Server is running on port {port}")
+        logging.info(f"Server is running and listening on port {port}")
+        # Log the actual address being bound to
+        logging.info(f"Server bound to 0.0.0.0:{port}")
         tornado.ioloop.IOLoop.current().start()
     except KeyboardInterrupt:
-        print("\nServer stopping...")
+        logging.info("\nServer stopping...")
     except Exception as e:
-        print(f"Error starting server: {e}")
+        logging.error(f"Error starting server: {e}")
