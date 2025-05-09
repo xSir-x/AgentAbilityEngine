@@ -82,7 +82,7 @@ class ProductSearchAbility(BaseAbility):
                 port = self.es_config.get("port")
                 username = self.es_config.get("username")
                 password = self.es_config.get("password")
-                use_ssl = self.es_config.get("use_ssl", True)  # Default to True for Huawei Cloud
+                use_ssl = self.es_config.get("use_ssl", False)  # Default to True for Huawei Cloud
                 
                 # Construct connection URL
                 es_url = f"{'https' if use_ssl else 'http'}://{host}:{port}"
