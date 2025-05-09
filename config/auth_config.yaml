@@ -2,8 +2,8 @@
 
 # Database configuration for Huawei Cloud MySQL
 database:
-  # host: "e6ea2387617046a283e6b583b0fc9a31in01.internal.cn-south-1.mysql.rds.myhuaweicloud.com"
-  host: "localhost"
+  host: "e6ea2387617046a283e6b583b0fc9a31in01.internal.cn-south-1.mysql.rds.myhuaweicloud.com"
+  # host: "localhost"
   user: "root"
   password: "!Y12345678"  # Replace with actual password
   db: "sales_management"  # Replace with your actual database name
