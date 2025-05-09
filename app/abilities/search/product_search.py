@@ -40,11 +40,11 @@ class ProductSearchAbility(BaseAbility):
         
         # Elasticsearch configuration
         self.es_config = self.config.get("elasticsearch", {
-            "host": "192.168.2.171",
+            "host": "es-cn-north-4.myhuaweicloud.com",  # Updated to use Huawei Cloud hostname format
             "port": 9200,
             "username": "admin",
             "password": "!Y12345678",
-            "use_ssl": False
+            "use_ssl": True  # Default to True for Huawei Cloud ES
         })
         
         # Search configuration
@@ -77,59 +77,42 @@ class ProductSearchAbility(BaseAbility):
         """
         try:
             if self.es_client is None:
-                # Construct connection URL
-                use_ssl = self.es_config.get("use_ssl", False)
+                # Extract connection parameters
                 host = self.es_config.get("host")
                 port = self.es_config.get("port")
                 username = self.es_config.get("username")
                 password = self.es_config.get("password")
+                use_ssl = self.es_config.get("use_ssl", True)  # Default to True for Huawei Cloud
                 
+                # Construct connection URL
                 es_url = f"{'https' if use_ssl else 'http'}://{host}:{port}"
-                logging.info(f"Connecting to Elasticsearch at {es_url}")
+                logging.info(f"Connecting to Huawei Cloud Elasticsearch at {es_url}")
                 
-                # Create Elasticsearch client with improved connection settings
+                # Create Elasticsearch client with simpler configuration
                 self.es_client = Elasticsearch(
                     [es_url],
                     http_auth=(username, password),
                     use_ssl=use_ssl,
                     verify_certs=False,  # In production, should be True with proper certificates
                     ssl_show_warn=False,
-                    # Add timeouts to prevent hanging connections
                     timeout=30,  # 30 second timeout for all operations
-                    retry_on_timeout=True,  # Retry when a timeout occurs
-                    max_retries=3,  # Number of retries
-                    # Add more connection settings for stability
-                    request_timeout=30,  # Request timeout in seconds
-                    connections_per_node=10,  # Limit concurrent connections
+                    retry_on_timeout=True,
+                    max_retries=3
                 )
                 
-                # Test connection with retry logic
-                connection_attempts = 3
-                for attempt in range(connection_attempts):
-                    try:
-                        if self.es_client.ping(request_timeout=10):
-                            es_info = self.es_client.info(request_timeout=10)
-                            logging.info(f"Connected to Elasticsearch version {es_info['version']['number']}")
-                            break
-                        else:
-                            if attempt < connection_attempts - 1:
-                                logging.warning(f"Cannot ping Elasticsearch, retrying... (attempt {attempt+1}/{connection_attempts})")
-                                import time
-                                time.sleep(1)  # Brief pause before retry
-                            else:
-                                raise ConnectionError("Cannot ping Elasticsearch after multiple attempts")
-                    except Exception as e:
-                        if attempt < connection_attempts - 1:
-                            logging.warning(f"Elasticsearch ping failed, retrying... (attempt {attempt+1}/{connection_attempts}): {str(e)}")
-                            import time
-                            time.sleep(1)  # Brief pause before retry
-                        else:
-                            raise
+                # Validate connection
+                if self.es_client.ping():
+                    es_info = self.es_client.info()
+                    logging.info(f"Connected to Elasticsearch version {es_info['version']['number']}")
+                else:
+                    logging.error("Cannot ping Elasticsearch")
+                    self.es_client = None
+                    raise ConnectionError("Cannot ping Elasticsearch")
             
             return self.es_client
         except ConnectionError as e:
             logging.error(f"Elasticsearch connection error: {e}")
-            self.es_client = None  # Reset client on connection error so next attempt creates a new one
+            self.es_client = None  # Reset client on connection error
             raise ConnectionError(f"Failed to connect to Elasticsearch: {str(e)}")
         except Exception as e:
             logging.error(f"Elasticsearch client error: {e}")
