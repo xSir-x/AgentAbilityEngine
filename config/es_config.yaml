@@ -3,7 +3,7 @@ elasticsearch:
   port: 9200
   username: "admin"
   password: "!Y12345678"
-  use_ssl: false
+  use_ssl: true
   
 search:
   index: "products"
