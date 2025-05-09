@@ -87,26 +87,54 @@ class ProductSearchAbility(BaseAbility):
                 es_url = f"{'https' if use_ssl else 'http'}://{host}:{port}"
                 logging.info(f"Connecting to Elasticsearch at {es_url}")
                 
-                # Create Elasticsearch client
+                # Create Elasticsearch client with improved connection settings
                 self.es_client = Elasticsearch(
                     [es_url],
                     http_auth=(username, password),
                     use_ssl=use_ssl,
                     verify_certs=False,  # In production, should be True with proper certificates
-                    ssl_show_warn=False
+                    ssl_show_warn=False,
+                    # Add timeouts to prevent hanging connections
+                    timeout=30,  # 30 second timeout for all operations
+                    retry_on_timeout=True,  # Retry when a timeout occurs
+                    max_retries=3,  # Number of retries
+                    # Add more connection settings for stability
+                    request_timeout=30,  # Request timeout in seconds
+                    connections_per_node=10,  # Limit concurrent connections
                 )
                 
-                # Test connection
-                if self.es_client.ping():
-                    es_info = self.es_client.info()
-                    logging.info(f"Connected to Elasticsearch version {es_info['version']['number']}")
-                else:
-                    raise ConnectionError("Cannot ping Elasticsearch")
+                # Test connection with retry logic
+                connection_attempts = 3
+                for attempt in range(connection_attempts):
+                    try:
+                        if self.es_client.ping(request_timeout=10):
+                            es_info = self.es_client.info(request_timeout=10)
+                            logging.info(f"Connected to Elasticsearch version {es_info['version']['number']}")
+                            break
+                        else:
+                            if attempt < connection_attempts - 1:
+                                logging.warning(f"Cannot ping Elasticsearch, retrying... (attempt {attempt+1}/{connection_attempts})")
+                                import time
+                                time.sleep(1)  # Brief pause before retry
+                            else:
+                                raise ConnectionError("Cannot ping Elasticsearch after multiple attempts")
+                    except Exception as e:
+                        if attempt < connection_attempts - 1:
+                            logging.warning(f"Elasticsearch ping failed, retrying... (attempt {attempt+1}/{connection_attempts}): {str(e)}")
+                            import time
+                            time.sleep(1)  # Brief pause before retry
+                        else:
+                            raise
             
             return self.es_client
-        except Exception as e:
+        except ConnectionError as e:
             logging.error(f"Elasticsearch connection error: {e}")
+            self.es_client = None  # Reset client on connection error so next attempt creates a new one
             raise ConnectionError(f"Failed to connect to Elasticsearch: {str(e)}")
+        except Exception as e:
+            logging.error(f"Elasticsearch client error: {e}")
+            self.es_client = None  # Reset client on error
+            raise ConnectionError(f"Error with Elasticsearch client: {str(e)}")
     
     @property
     def name(self) -> str:
@@ -232,40 +260,88 @@ class ProductSearchAbility(BaseAbility):
             "size": size
         }
         
-        # Execute search
-        response = es_client.search(index=index, body=query)
+        # Execute search with explicit timeout and retries
+        max_attempts = 3
+        last_exception = None
         
-        # Process results
-        total = response["hits"]["total"]["value"]
-        hits = response["hits"]["hits"]
-        
-        # Format results
-        results = []
-        for hit in hits:
-            source = hit["_source"]
-            score = hit["_score"]
-            
-            # Skip low quality matches
-            if score < min_score:
-                continue
+        for attempt in range(max_attempts):
+            try:
+                # Add request_timeout to prevent hanging
+                response = es_client.search(
+                    index=index, 
+                    body=query,
+                    request_timeout=30,  # 30 second timeout for search operation
+                )
                 
-            # Format the product data
-            product = {
-                "款号": source.get("款号", ""),
-                "产品名称": source.get("产品名称", ""),
-                "品目": source.get("品目", ""),
-                "score": score,
-                "is_fallback": False
-            }
-            results.append(product)
+                # Process results - safely handle different response formats
+                try:
+                    # For Elasticsearch 7.x+
+                    if isinstance(response["hits"]["total"], dict) and "value" in response["hits"]["total"]:
+                        total = response["hits"]["total"]["value"]
+                    # For Elasticsearch 6.x and earlier
+                    else:
+                        total = response["hits"]["total"]
+                except (KeyError, TypeError):
+                    # Fallback if response format is unexpected
+                    total = len(response["hits"]["hits"]) if "hits" in response and "hits" in response["hits"] else 0
+                    logging.warning("Could not determine total hits count from ES response, using hits length instead")
+                
+                hits = response["hits"]["hits"]
+                
+                # Format results
+                results = []
+                for hit in hits:
+                    source = hit["_source"]
+                    score = hit["_score"]
+                    
+                    # Skip low quality matches
+                    if score < min_score:
+                        continue
+                        
+                    # Format the product data
+                    product = {
+                        "款号": source.get("款号", ""),
+                        "产品名称": source.get("产品名称", ""),
+                        "品目": source.get("品目", ""),
+                        "score": score,
+                        "is_fallback": False
+                    }
+                    results.append(product)
+                
+                return {
+                    "success": True,
+                    "results": results,
+                    "total": len(results),
+                    "original_total": total,
+                    "is_fallback": False
+                }
+                
+            except ConnectionError as e:
+                last_exception = e
+                logging.warning(f"Search attempt {attempt+1}/{max_attempts} failed with connection error: {str(e)}")
+                if attempt < max_attempts - 1:
+                    import time
+                    time.sleep(1 * (attempt + 1))  # Exponential backoff
+                    # Try to reconnect on next attempt
+                    try:
+                        # Ping to check if connection is still valid
+                        if not es_client.ping(request_timeout=5):
+                            # Connection is down, reset client to force reconnection
+                            self.es_client = None
+                            es_client = self._get_es_client()
+                    except Exception:
+                        # Failed to ping, reset client
+                        self.es_client = None
+                        es_client = self._get_es_client()
+            except Exception as e:
+                last_exception = e
+                logging.warning(f"Search attempt {attempt+1}/{max_attempts} failed with error: {str(e)}")
+                if attempt < max_attempts - 1:
+                    import time
+                    time.sleep(1 * (attempt + 1))  # Exponential backoff
         
-        return {
-            "success": True,
-            "results": results,
-            "total": len(results),
-            "original_total": total,
-            "is_fallback": False
-        }
+        # If we got here, all attempts failed
+        raise ConnectionError(f"Failed to execute search after {max_attempts} attempts. Last error: {str(last_exception)}")
     
     def _get_fallback_recommendations(self, es_client: Elasticsearch) -> Dict[str, Any]:
         """
@@ -297,36 +373,93 @@ class ProductSearchAbility(BaseAbility):
             "size": fallback_size
         }
         
-        # Execute search
-        response = es_client.search(index=index, body=query)
+        # Execute search with explicit timeout and retries
+        max_attempts = 3
+        last_exception = None
         
-        # Process results
-        total = response["hits"]["total"]["value"]
-        hits = response["hits"]["hits"]
+        for attempt in range(max_attempts):
+            try:
+                # Add request_timeout to prevent hanging
+                response = es_client.search(
+                    index=index, 
+                    body=query,
+                    request_timeout=30,  # 30 second timeout for search operation
+                )
+                
+                # Process results - safely handle different response formats
+                try:
+                    # For Elasticsearch 7.x+
+                    if isinstance(response["hits"]["total"], dict) and "value" in response["hits"]["total"]:
+                        total = response["hits"]["total"]["value"]
+                    # For Elasticsearch 6.x and earlier
+                    else:
+                        total = response["hits"]["total"]
+                except (KeyError, TypeError):
+                    # Fallback if response format is unexpected
+                    total = len(response["hits"]["hits"]) if "hits" in response and "hits" in response["hits"] else 0
+                    logging.warning("Could not determine total hits count from ES response in fallback, using hits length instead")
+                
+                hits = response["hits"]["hits"]
+                
+                # Format results
+                results = []
+                for hit in hits:
+                    source = hit["_source"]
+                    
+                    # Format the product data
+                    product = {
+                        "款号": source.get("款号", ""),
+                        "产品名称": source.get("产品名称", ""),
+                        "品目": source.get("品目", ""),
+                        "score": hit["_score"],
+                        "is_fallback": True,
+                        "fallback_keyword": random_keyword
+                    }
+                    results.append(product)
+                
+                return {
+                    "success": True,
+                    "results": results,
+                    "total": len(results),
+                    "original_total": total,
+                    "is_fallback": True,
+                    "fallback_keyword": random_keyword
+                }
+                
+            except ConnectionError as e:
+                last_exception = e
+                logging.warning(f"Fallback search attempt {attempt+1}/{max_attempts} failed with connection error: {str(e)}")
+                if attempt < max_attempts - 1:
+                    import time
+                    time.sleep(1 * (attempt + 1))  # Exponential backoff
+                    # Try to reconnect on next attempt
+                    try:
+                        # Ping to check if connection is still valid
+                        if not es_client.ping(request_timeout=5):
+                            # Connection is down, reset client to force reconnection
+                            self.es_client = None
+                            es_client = self._get_es_client()
+                    except Exception:
+                        # Failed to ping, reset client
+                        self.es_client = None
+                        es_client = self._get_es_client()
+            except Exception as e:
+                last_exception = e
+                logging.warning(f"Fallback search attempt {attempt+1}/{max_attempts} failed with error: {str(e)}")
+                if attempt < max_attempts - 1:
+                    import time
+                    time.sleep(1 * (attempt + 1))  # Exponential backoff
         
-        # Format results
-        results = []
-        for hit in hits:
-            source = hit["_source"]
-            
-            # Format the product data
-            product = {
-                "款号": source.get("款号", ""),
-                "产品名称": source.get("产品名称", ""),
-                "品目": source.get("品目", ""),
-                "score": hit["_score"],
-                "is_fallback": True,
-                "fallback_keyword": random_keyword
-            }
-            results.append(product)
-        
+        # If we got here, all attempts failed - since this is fallback, return empty results instead of raising
+        logging.error(f"Failed to execute fallback search after {max_attempts} attempts. Last error: {str(last_exception)}")
         return {
-            "success": True,
-            "results": results,
-            "total": len(results),
-            "original_total": total,
+            "success": False,
+            "results": [],
+            "total": 0,
+            "original_total": 0,
             "is_fallback": True,
-            "fallback_keyword": random_keyword
+            "fallback_keyword": random_keyword,
+            "error": f"Fallback search failed: {str(last_exception)}"
         }
     
     def __del__(self):
