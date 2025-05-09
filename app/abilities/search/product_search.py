@@ -82,13 +82,21 @@ class ProductSearchAbility(BaseAbility):
                 port = self.es_config.get("port")
                 username = self.es_config.get("username")
                 password = self.es_config.get("password")
-                use_ssl = self.es_config.get("use_ssl", False)  # Default to True for Huawei Cloud
+                use_ssl = self.es_config.get("use_ssl", False)
+                
+                # 打印连接参数 (密码只显示前两位，其余用*替代)
+                masked_password = password[:2] + "*" * (len(password) - 2) if password else None
+                logging.warning(f"ES连接参数: host={host}, port={port}, username={username}, password={masked_password}, use_ssl={use_ssl}")
                 
                 # Construct connection URL
                 es_url = f"{'https' if use_ssl else 'http'}://{host}:{port}"
-                logging.info(f"Connecting to Huawei Cloud Elasticsearch at {es_url}")
+                logging.info(f"正在连接到Elasticsearch: {es_url} (use_ssl={use_ssl})")
+                
+                # 记录连接配置（不包含密码）
+                logging.debug(f"Elasticsearch连接配置: host={host}, port={port}, username={username}, use_ssl={use_ssl}")
                 
                 # Create Elasticsearch client with simpler configuration
+                logging.debug(f"创建Elasticsearch客户端实例，超时设置为30秒")
                 self.es_client = Elasticsearch(
                     [es_url],
                     http_auth=(username, password),
@@ -101,21 +109,27 @@ class ProductSearchAbility(BaseAbility):
                 )
                 
                 # Validate connection
+                logging.debug("尝试ping Elasticsearch以验证连接...")
                 if self.es_client.ping():
                     es_info = self.es_client.info()
-                    logging.info(f"Connected to Elasticsearch version {es_info['version']['number']}")
+                    logging.info(f"成功连接到Elasticsearch! 版本: {es_info['version']['number']}")
+                    logging.debug(f"Elasticsearch完整信息: {json.dumps(es_info, ensure_ascii=False)}")
                 else:
-                    logging.error("Cannot ping Elasticsearch")
+                    logging.error("Elasticsearch ping失败，无法建立连接")
                     self.es_client = None
                     raise ConnectionError("Cannot ping Elasticsearch")
             
             return self.es_client
         except ConnectionError as e:
-            logging.error(f"Elasticsearch connection error: {e}")
+            logging.error(f"Elasticsearch连接错误: {str(e)}")
+            logging.error(f"连接异常详情: {e.__class__.__name__}")
+            logging.debug(f"连接异常堆栈: ", exc_info=True)
             self.es_client = None  # Reset client on connection error
             raise ConnectionError(f"Failed to connect to Elasticsearch: {str(e)}")
         except Exception as e:
-            logging.error(f"Elasticsearch client error: {e}")
+            logging.error(f"Elasticsearch客户端错误: {str(e)}")
+            logging.error(f"异常类型: {e.__class__.__name__}")
+            logging.debug(f"异常堆栈: ", exc_info=True)
             self.es_client = None  # Reset client on error
             raise ConnectionError(f"Error with Elasticsearch client: {str(e)}")
     
@@ -162,6 +176,7 @@ class ProductSearchAbility(BaseAbility):
         size = context.get("size", self.search_config.get("default_size", 5))
         
         if not keyword:
+            logging.warning("收到空的搜索关键词请求")
             return {
                 "success": False,
                 "error": "Empty search keyword",
@@ -170,28 +185,35 @@ class ProductSearchAbility(BaseAbility):
                 "is_fallback": False
             }
         
-        logging.info(f"Searching for products with keyword: '{keyword}'")
+        logging.info(f"开始搜索产品，关键词: '{keyword}'，返回数量: {size}")
         
         try:
             # Get elasticsearch client
+            logging.debug(f"尝试获取Elasticsearch客户端连接...")
             es_client = self._get_es_client()
+            logging.debug(f"成功获取Elasticsearch客户端连接")
             
             # Perform fuzzy search
+            logging.info(f"执行模糊搜索，关键词: '{keyword}'")
             search_results = self._fuzzy_search(es_client, keyword, size)
             
             # Check if results were found
             if search_results["total"] == 0 and self.fallback_config.get("enabled", True):
-                logging.info(f"No results found for '{keyword}', using fallback recommendations")
+                logging.info(f"关键词 '{keyword}' 未找到结果，启用备选推荐")
                 fallback_results = self._get_fallback_recommendations(es_client)
                 fallback_results["is_fallback"] = True
                 fallback_results["original_keyword"] = keyword
+                logging.info(f"返回备选推荐结果，数量: {fallback_results['total']}")
                 return fallback_results
             
             # Return search results
+            logging.info(f"搜索成功完成，找到 {search_results['total']} 个结果")
             return search_results
                 
         except Exception as e:
-            logging.error(f"Product search error: {e}", exc_info=True)
+            logging.error(f"产品搜索错误: {e}")
+            logging.error(f"异常类型: {e.__class__.__name__}")
+            logging.debug(f"异常堆栈: ", exc_info=True)
             return {
                 "success": False,
                 "error": f"Search error: {str(e)}",
@@ -215,6 +237,8 @@ class ProductSearchAbility(BaseAbility):
         index = self.search_config.get("index", "products")
         fuzziness = self.search_config.get("fuzziness", "AUTO")
         min_score = self.search_config.get("min_score", 0.5)
+        
+        logging.debug(f"准备执行模糊搜索，索引: {index}, 关键词: '{keyword}', 大小: {size}, 模糊度: {fuzziness}")
         
         # Build query - combining multiple query types for better fuzzy matching
         query = {
@@ -243,12 +267,15 @@ class ProductSearchAbility(BaseAbility):
             "size": size
         }
         
+        logging.debug(f"ES搜索查询: {json.dumps(query, ensure_ascii=False)}")
+        
         # Execute search with explicit timeout and retries
         max_attempts = 3
         last_exception = None
         
         for attempt in range(max_attempts):
             try:
+                logging.debug(f"开始第 {attempt+1}/{max_attempts} 次搜索尝试...")
                 # Add request_timeout to prevent hanging
                 response = es_client.search(
                     index=index, 
@@ -256,20 +283,25 @@ class ProductSearchAbility(BaseAbility):
                     request_timeout=30,  # 30 second timeout for search operation
                 )
                 
+                logging.debug(f"ES搜索响应: {json.dumps(response, ensure_ascii=False, default=str)[:500]}...")
+                
                 # Process results - safely handle different response formats
                 try:
                     # For Elasticsearch 7.x+
                     if isinstance(response["hits"]["total"], dict) and "value" in response["hits"]["total"]:
                         total = response["hits"]["total"]["value"]
+                        logging.debug(f"使用ES 7.x+格式解析总数: {total}")
                     # For Elasticsearch 6.x and earlier
                     else:
                         total = response["hits"]["total"]
+                        logging.debug(f"使用ES 6.x格式解析总数: {total}")
                 except (KeyError, TypeError):
                     # Fallback if response format is unexpected
                     total = len(response["hits"]["hits"]) if "hits" in response and "hits" in response["hits"] else 0
-                    logging.warning("Could not determine total hits count from ES response, using hits length instead")
+                    logging.warning(f"无法从ES响应中确定总命中数，使用命中列表长度代替: {total}")
                 
                 hits = response["hits"]["hits"]
+                logging.debug(f"ES返回原始命中数: {len(hits)}")
                 
                 # Format results
                 results = []
@@ -279,6 +311,7 @@ class ProductSearchAbility(BaseAbility):
                     
                     # Skip low quality matches
                     if score < min_score:
+                        logging.debug(f"跳过低质量匹配: 款号={source.get('款号', '')}, 分数={score} < {min_score}")
                         continue
                         
                     # Format the product data
@@ -291,6 +324,8 @@ class ProductSearchAbility(BaseAbility):
                     }
                     results.append(product)
                 
+                logging.info(f"成功执行搜索: 关键词='{keyword}', 原始命中={total}, 过滤后结果={len(results)}")
+                
                 return {
                     "success": True,
                     "results": results,
@@ -301,30 +336,40 @@ class ProductSearchAbility(BaseAbility):
                 
             except ConnectionError as e:
                 last_exception = e
-                logging.warning(f"Search attempt {attempt+1}/{max_attempts} failed with connection error: {str(e)}")
+                logging.warning(f"搜索尝试 {attempt+1}/{max_attempts} 失败，连接错误: {str(e)}")
                 if attempt < max_attempts - 1:
                     import time
-                    time.sleep(1 * (attempt + 1))  # Exponential backoff
+                    retry_delay = 1 * (attempt + 1)
+                    logging.debug(f"等待 {retry_delay} 秒后重试...")
+                    time.sleep(retry_delay)  # Exponential backoff
                     # Try to reconnect on next attempt
                     try:
                         # Ping to check if connection is still valid
+                        logging.debug("尝试ping ES服务器检查连接状态...")
                         if not es_client.ping(request_timeout=5):
                             # Connection is down, reset client to force reconnection
+                            logging.debug("ping失败，重置客户端以强制重新连接")
                             self.es_client = None
                             es_client = self._get_es_client()
-                    except Exception:
+                    except Exception as ping_error:
                         # Failed to ping, reset client
+                        logging.debug(f"ping异常: {str(ping_error)}，重置客户端以强制重新连接")
                         self.es_client = None
                         es_client = self._get_es_client()
             except Exception as e:
                 last_exception = e
-                logging.warning(f"Search attempt {attempt+1}/{max_attempts} failed with error: {str(e)}")
+                logging.warning(f"搜索尝试 {attempt+1}/{max_attempts} 失败，错误: {str(e)}")
+                logging.debug(f"异常详情: {e.__class__.__name__}", exc_info=True)
                 if attempt < max_attempts - 1:
                     import time
-                    time.sleep(1 * (attempt + 1))  # Exponential backoff
+                    retry_delay = 1 * (attempt + 1)
+                    logging.debug(f"等待 {retry_delay} 秒后重试...")
+                    time.sleep(retry_delay)  # Exponential backoff
         
         # If we got here, all attempts failed
-        raise ConnectionError(f"Failed to execute search after {max_attempts} attempts. Last error: {str(last_exception)}")
+        error_msg = f"经过 {max_attempts} 次尝试后搜索失败。最后错误: {str(last_exception)}"
+        logging.error(error_msg)
+        raise ConnectionError(error_msg)
     
     def _get_fallback_recommendations(self, es_client: Elasticsearch) -> Dict[str, Any]:
         """
