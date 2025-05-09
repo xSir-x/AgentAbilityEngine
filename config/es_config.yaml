@@ -1,0 +1,17 @@
+elasticsearch:
+  host: "192.168.2.171"
+  port: 9200
+  username: "admin"
+  password: "!Y12345678"
+  use_ssl: false
+  
+search:
+  index: "products"
+  default_size: 5
+  fuzziness: "AUTO"
+  min_score: 0.5
+  
+fallback:
+  enabled: true
+  keywords: ["耳环", "手链", "耳饰"]
+  size: 3

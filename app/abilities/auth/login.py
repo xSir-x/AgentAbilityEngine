@@ -98,6 +98,8 @@ class LoginAbility(BaseAbility):
         username = context.get("username")
         password = context.get("password")
         
+        print("username: "+username)
+        print("password: "+password)
         # Try to authenticate using database
         try:
             # Get database connection
@@ -106,7 +108,8 @@ class LoginAbility(BaseAbility):
             with connection.cursor() as cursor:
                 # Verify user credentials
                 # Note: In production, passwords should be hashed
-                sql = "SELECT * FROM users WHERE username = %s AND password = %s"
+                sql = "SELECT * FROM sales_vendor_info WHERE user_name = %s AND password = %s"
+                connection.commit()
                 cursor.execute(sql, (username, password))
                 user_data = cursor.fetchone()
                 
@@ -116,28 +119,21 @@ class LoginAbility(BaseAbility):
                         "error": "Invalid username or password"
                     }
                 
-                # Get merchant details based on merchant_id
-                merchant_id = user_data.get("merchant_id")
-                sql = "SELECT * FROM merchants WHERE merchant_id = %s"
-                cursor.execute(sql, (merchant_id,))
-                merchant_info = cursor.fetchone()
-                
-                if not merchant_info:
-                    return {
-                        "success": False,
-                        "error": f"Merchant information not found for ID: {merchant_id}"
-                    }
-                
-                # Return merchant details
+                # # Get merchant details based on merchant_id
+                # merchant_id = user_data.get("merchant_id")
+                # sql = "SELECT * FROM merchants WHERE merchant_id = %s"
+                # cursor.execute(sql, (merchant_id,))
+                # merchant_info = cursor.fetchone()
+
                 return {
                     "success": True,
-                    "merchant_id": merchant_id,
-                    "merchant_bg_url": merchant_info.get("bg_url"),
-                    "merchant_bot_id": merchant_info.get("bot_id"),
-                    "merchant_user_id": merchant_info.get("user_id"),
-                    "merchant_coze_token": merchant_info.get("coze_token")
+                    "merchant_id": user_data[2],
+                    "merchant_bg_url": user_data[3] ,
+                    "merchant_bot_id": user_data[4] ,
+                    "merchant_user_id": user_data[5] ,
+                    "merchant_coze_token": user_data[6]
                 }
-                
+                       
         except Exception as e:
             logging.error(f"Database login error: {e}")
             
