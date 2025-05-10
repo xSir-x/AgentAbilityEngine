@@ -131,7 +131,8 @@ class LoginAbility(BaseAbility):
                     "merchant_bg_url": user_data[3] ,
                     "merchant_bot_id": user_data[4] ,
                     "merchant_user_id": user_data[5] ,
-                    "merchant_coze_token": user_data[6]
+                    "merchant_coze_token": user_data[6] ,
+                    "merchant_welcome_text": user_data[7]
                 }
                        
         except Exception as e:
@@ -166,7 +167,8 @@ class LoginAbility(BaseAbility):
                 "merchant_bg_url": merchant_info.get("vendor_bg", "https://default-bg-url.com/background.jpg"),
                 "merchant_bot_id": merchant_info.get("bot_id", "default_bot_id"),
                 "merchant_user_id": merchant_info.get("user_id", "default_user_id"),
-                "merchant_coze_token": merchant_info.get("coze_token", "default_coze_token")
+                "merchant_coze_token": merchant_info.get("coze_token", "default_coze_token"),
+                "merchant_welcome_text": merchant_info.get("merchant_welcome_text", "default_coze_token")
             }
     
     def __del__(self):
