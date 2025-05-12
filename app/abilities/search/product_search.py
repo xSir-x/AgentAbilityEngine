@@ -107,7 +107,7 @@ class ProductSearchAbility(BaseAbility):
                     retry_on_timeout=True,
                     max_retries=3
                 )
-                
+
                 # Validate connection
                 logging.debug("尝试ping Elasticsearch以验证连接...")
                 if self.es_client.ping():
@@ -153,7 +153,22 @@ class ProductSearchAbility(BaseAbility):
         Returns:
             bool: Whether the parameters are valid
         """
-        # Check if keyword parameter is provided
+        # 首先对可能的非字典输入进行处理
+        if isinstance(context, str):
+            try:
+                # 尝试解析为JSON
+                parsed_context = json.loads(context)
+                return "keyword" in parsed_context and isinstance(parsed_context["keyword"], str)
+            except json.JSONDecodeError:
+                # 如果是纯文本，则视为关键词
+                return True  # 直接返回True，后续会将其转换为{"keyword": context}
+        
+        # 检查是否是表单数据的常见格式
+        for possible_key in ["keyword", "query", "q", "search", "text"]:
+            if possible_key in context:
+                return isinstance(context[possible_key], str)
+                
+        # 原始验证：检查keyword参数是否存在
         return "keyword" in context and isinstance(context["keyword"], str)
     
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -172,6 +187,58 @@ class ProductSearchAbility(BaseAbility):
                 - total: Total number of matches
                 - is_fallback: Whether results are fallback recommendations
         """
+        # 处理不同的输入格式
+        try:
+            if isinstance(context, str):
+                try:
+                    # 尝试解析字符串为JSON
+                    import json
+                    context = json.loads(context)
+                    logging.debug("成功将字符串解析为JSON对象")
+                except json.JSONDecodeError:
+                    # 如果不是有效的JSON，将其视为关键词
+                    logging.warning(f"接收到非JSON格式的字符串输入，将其作为关键词处理: {context[:50]}...")
+                    context = {"keyword": context}
+            
+            # 检查是否是表单数据格式
+            form_keyword = None
+            if isinstance(context, dict):
+                # 检查常见form变量名
+                for possible_key in ["keyword", "query", "q", "search", "text"]:
+                    if possible_key in context:
+                        form_keyword = context[possible_key]
+                        if not isinstance(form_keyword, str):
+                            # 处理表单中的非字符串值
+                            form_keyword = str(form_keyword)
+                        logging.debug(f"从form data中找到关键词字段: {possible_key}={form_keyword}")
+                        break
+                
+                if form_keyword is not None and possible_key != "keyword":
+                    context = {"keyword": form_keyword}
+                    logging.debug(f"将form data转换为标准格式: {context}")
+                
+            # 如果处理后仍无法获取关键词，记录警告
+            if not isinstance(context, dict) or "keyword" not in context:
+                logging.warning(f"无法从输入中提取关键词: {str(context)[:100]}...")
+                return {
+                    "success": False,
+                    "error": "无法识别有效的搜索关键词",
+                    "results": [],
+                    "total": 0,
+                    "is_fallback": False
+                }
+        except Exception as e:
+            logging.error(f"处理输入数据时出错: {str(e)}")
+            logging.debug("输入处理错误详情", exc_info=True)
+            return {
+                "success": False, 
+                "error": f"处理输入格式时出错: {str(e)}", 
+                "results": [], 
+                "total": 0,
+                "is_fallback": False
+            }
+        
+        # 继续原有的执行逻辑
         keyword = context.get("keyword", "").strip()
         size = context.get("size", self.search_config.get("default_size", 5))
         
