@@ -44,6 +44,46 @@ class AbilityHandler(BaseHandler):
         except Exception as e:
             self.set_status(500)
             self.write({"success": False, "error": "Internal server error"})
+            
+    async def get(self, ability_name: str):
+        """Handle ability execution request with GET method
+        
+        Args:
+            ability_name: Name of the ability to execute
+        """
+        try:
+            # 从URL参数获取数据
+            context = {}
+            for key in self.request.arguments:
+                # 处理参数值，tornado以字节形式存储参数
+                values = self.request.arguments[key]
+                # 如果是单值参数，取第一个值
+                if len(values) == 1:
+                    context[key] = values[0].decode('utf-8')
+                # 如果是多值参数，转换所有值
+                else:
+                    context[key] = [value.decode('utf-8') for value in values]
+            
+            # 特殊处理product_search能力
+            if ability_name == "product_search" and "keyword" not in context and len(context) == 0:
+                # 查看是否有查询字符串但没有指定参数名
+                query_string = self.request.query
+                if query_string and not '=' in query_string:
+                    # 将整个查询字符串视为关键词
+                    context["keyword"] = query_string
+            
+            result = await self.ability_manager.execute_ability(ability_name, context)
+            self.write({"success": True, "data": result})
+        except KeyError as e:
+            self.set_status(404)
+            self.write({"success": False, "error": str(e)})
+        except ValueError as e:
+            self.set_status(400)
+            self.write({"success": False, "error": str(e)})
+        except Exception as e:
+            import traceback
+            self.set_status(500)
+            self.write({"success": False, "error": f"Internal server error: {str(e)}"})
 
 class HealthHandler(BaseHandler):
     """Health check handler"""
